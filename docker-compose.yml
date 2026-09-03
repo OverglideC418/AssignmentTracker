@@ -1,0 +1,17 @@
+services:
+  unysync:
+    build: .
+    container_name: unysync
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      UNISYNC_DB: /app/data/unysync.db
+      UNISYNC_TIMEZONE: ${UNISYNC_TIMEZONE:-America/Denver}
+      UNISYNC_SECURE_COOKIE: ${UNISYNC_SECURE_COOKIE:-0}
+    volumes:
+      - unysync-data:/app/data
+
+volumes:
+  unysync-data:
+
