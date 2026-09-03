@@ -4,7 +4,10 @@ COPY frontend/package.json frontend/tsconfig.json frontend/vite.config.ts ./
 COPY frontend/index.html ./index.html
 COPY frontend/public ./public
 COPY frontend/src ./src
-RUN npm install && npm run build
+RUN node -e "const p=require('./package.json'); if (p.devDependencies.vite !== '5.4.14') { throw new Error('UniSync requires Vite 5.4.14 for Raspberry Pi ARM builds; received ' + p.devDependencies.vite) }"
+RUN npm install --no-audit --no-fund --include=optional \
+    && npm ls vite @vitejs/plugin-react \
+    && npm run build
 
 FROM python:3.12-slim
 WORKDIR /app
@@ -16,4 +19,3 @@ RUN mkdir -p /app/data
 ENV UNISYNC_DB=/app/data/unysync.db
 EXPOSE 8000
 CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
-

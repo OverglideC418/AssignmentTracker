@@ -23,6 +23,15 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+To run the same checks directly on the Raspberry Pi, use the included preflight script:
+
+```sh
+chmod +x scripts/pi-preflight.sh
+./scripts/pi-preflight.sh
+```
+
+Repository CI also runs the backend tests, frontend production build, and Docker builds for both `linux/arm64` and `linux/arm/v7`, catching ARM-specific dependency failures before deployment.
+
 Open `http://<raspberry-pi-ip>:8000` for the first-run password setup. For reliable installable PWA/offline behavior, access the app through an HTTPS Tailscale hostname. An HTTP address may still work as a normal website, but browsers can restrict service workers on insecure origins.
 
 `.env` supports:
