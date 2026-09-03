@@ -90,3 +90,4 @@ PYTHONPATH=backend python3 -m pytest backend/tests
 ## Privacy and security
 
 UniSync has no advertising, analytics, or tracking. Keep the Raspberry Pi and Tailscale account secured, use HTTPS when possible, and never commit `.env`, database files, or private iCal URLs.
+# AssignmentTracker
