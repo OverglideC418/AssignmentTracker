@@ -1,4 +1,4 @@
-name: UniSync checks
+name: AssignmentTracker checks
 
 on:
   push:
@@ -44,7 +44,6 @@ jobs:
           file: Dockerfile
           platforms: ${{ matrix.platform }}
           push: false
-          tags: unysync:test-${{ strategy.job-index }}
+          tags: assignmenttracker:test-${{ strategy.job-index }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-

@@ -1,16 +1,16 @@
 services:
-  unysync:
+  assignmenttracker:
     build: .
-    container_name: unysync
+    container_name: assignmenttracker
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      UNISYNC_DB: /app/data/unysync.db
-      UNISYNC_TIMEZONE: ${UNISYNC_TIMEZONE:-America/Denver}
-      UNISYNC_SECURE_COOKIE: ${UNISYNC_SECURE_COOKIE:-0}
+      ASSIGNMENTTRACKER_DB: /app/data/assignmenttracker.db
+      ASSIGNMENTTRACKER_TIMEZONE: ${ASSIGNMENTTRACKER_TIMEZONE:-America/Denver}
+      ASSIGNMENTTRACKER_SECURE_COOKIE: ${ASSIGNMENTTRACKER_SECURE_COOKIE:-0}
     volumes:
-      - unysync-data:/app/data
+      - assignmenttracker-data:/app/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/status', timeout=3)"]
       interval: 30s
@@ -19,4 +19,6 @@ services:
       start_period: 10s
 
 volumes:
-  unysync-data:
+  assignmenttracker-data:
+    # Keep the existing volume name by default so a rebrand does not hide prior data.
+    name: ${ASSIGNMENTTRACKER_VOLUME_NAME:-unysync-data}

@@ -23,9 +23,17 @@ from pydantic import BaseModel, Field
 
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = Path(os.getenv("UNISYNC_DB", ROOT / "data" / "unysync.db"))
+LEGACY_DB_PATH = ROOT / "data" / "unysync.db"
+DEFAULT_DB_PATH = ROOT / "data" / "assignmenttracker.db"
+configured_db = os.getenv("ASSIGNMENTTRACKER_DB")
+if configured_db:
+    configured_path = Path(configured_db)
+    DB_PATH = LEGACY_DB_PATH if configured_path.name == "assignmenttracker.db" and not configured_path.exists() and LEGACY_DB_PATH.exists() else configured_path
+else:
+    DB_PATH = Path(os.getenv("UNISYNC_DB", LEGACY_DB_PATH if LEGACY_DB_PATH.exists() else DEFAULT_DB_PATH))
 FRONTEND_DIST = ROOT / "frontend" / "dist"
-DEFAULT_TIMEZONE = os.getenv("UNISYNC_TIMEZONE", "America/Denver")
+DEFAULT_TIMEZONE = os.getenv("ASSIGNMENTTRACKER_TIMEZONE", os.getenv("UNISYNC_TIMEZONE", "America/Denver"))
+SECURE_COOKIE = os.getenv("ASSIGNMENTTRACKER_SECURE_COOKIE", os.getenv("UNISYNC_SECURE_COOKIE", "0")) == "1"
 SESSION_DAYS = 30
 
 
@@ -141,7 +149,8 @@ def user_exists() -> bool:
         return connection.execute("SELECT 1 FROM users WHERE id = 1").fetchone() is not None
 
 
-def current_user(session: str | None = Cookie(default=None, alias="unysync_session")) -> int:
+def current_user(session: str | None = Cookie(default=None, alias="assignmenttracker_session"), legacy_session: str | None = Cookie(default=None, alias="unysync_session")) -> int:
+    session = session or legacy_session
     if not session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in required")
     with db() as connection:
@@ -344,7 +353,7 @@ def fetch_ical(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ValueError("Calendar URL must use http or https")
-    request = urllib.request.Request(url, headers={"User-Agent": "UniSync/1.0"})
+    request = urllib.request.Request(url, headers={"User-Agent": "AssignmentTracker/1.0"})
     with urllib.request.urlopen(request, timeout=20) as response:
         return response.read(5_000_000).decode("utf-8-sig", errors="replace")
 
@@ -416,12 +425,12 @@ async def lifespan(_: FastAPI):
     task.cancel()
 
 
-app = FastAPI(title="UniSync", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="AssignmentTracker", version="1.0.0", lifespan=lifespan)
 
 
 @app.get("/api/status")
 def status_info() -> dict[str, Any]:
-    return {"setup_required": not user_exists(), "app": "UniSync", "version": "1.0.0"}
+    return {"setup_required": not user_exists(), "app": "AssignmentTracker", "version": "1.0.0"}
 
 
 @app.post("/api/setup")
@@ -442,15 +451,16 @@ def login(credentials: Credentials, response: Response) -> dict[str, bool]:
         token = secrets.token_urlsafe(32)
         expires = datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)
         connection.execute("INSERT INTO sessions(token,user_id,expires_at) VALUES (?,?,?)", (token, 1, expires.isoformat()))
-    response.set_cookie("unysync_session", token, httponly=True, samesite="lax", secure=os.getenv("UNISYNC_SECURE_COOKIE", "0") == "1", max_age=SESSION_DAYS * 86400)
+    response.set_cookie("assignmenttracker_session", token, httponly=True, samesite="lax", secure=SECURE_COOKIE, max_age=SESSION_DAYS * 86400)
     return {"authenticated": True}
 
 
 @app.post("/api/logout")
-def logout(response: Response, session: str | None = Cookie(default=None, alias="unysync_session")) -> dict[str, bool]:
-    if session:
+def logout(response: Response, session: str | None = Cookie(default=None, alias="assignmenttracker_session"), legacy_session: str | None = Cookie(default=None, alias="unysync_session")) -> dict[str, bool]:
+    if session or legacy_session:
         with db() as connection:
-            connection.execute("DELETE FROM sessions WHERE token=?", (session,))
+            connection.execute("DELETE FROM sessions WHERE token IN (?, ?)", (session or "", legacy_session or ""))
+    response.delete_cookie("assignmenttracker_session")
     response.delete_cookie("unysync_session")
     return {"authenticated": False}
 

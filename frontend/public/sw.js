@@ -1,4 +1,4 @@
-const CACHE = 'unysync-shell-v1'
+const CACHE = 'assignmenttracker-shell-v1'
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(['/', '/manifest.webmanifest'])))
   self.skipWaiting()
@@ -12,4 +12,3 @@ self.addEventListener('fetch', (event) => {
     return response
   }).catch(() => caches.match(event.request).then((cached) => cached || caches.match('/'))))
 })
-

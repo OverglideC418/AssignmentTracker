@@ -1,6 +1,6 @@
-# UniSync
+# AssignmentTracker
 
-UniSync is a private, ad-free assignment tracker designed to run on a Raspberry Pi. It imports assignment-like events from multiple iCal feeds, keeps completion state in SQLite, and remains usable on a phone when temporarily offline.
+AssignmentTracker is a private, ad-free assignment tracker designed to run on a Raspberry Pi. It imports assignment-like events from multiple iCal feeds, keeps completion state in SQLite, and remains usable on a phone when temporarily offline.
 
 ## Features
 
@@ -17,8 +17,8 @@ UniSync is a private, ad-free assignment tracker designed to run on a Raspberry 
 The recommended Raspberry Pi installation uses Docker Compose.
 
 ```sh
-git clone <your-repository-url> unysync
-cd unysync
+git clone <your-repository-url> assignmenttracker
+cd assignmenttracker
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -37,11 +37,12 @@ Open `http://<raspberry-pi-ip>:8000` for the first-run password setup. For relia
 `.env` supports:
 
 ```dotenv
-UNISYNC_TIMEZONE=America/Denver
-UNISYNC_SECURE_COOKIE=1
+ASSIGNMENTTRACKER_TIMEZONE=America/Denver
+ASSIGNMENTTRACKER_SECURE_COOKIE=1
 ```
 
-Set `UNISYNC_SECURE_COOKIE=1` only when the app is accessed over HTTPS.
+Set `ASSIGNMENTTRACKER_SECURE_COOKIE=1` only when the app is accessed over HTTPS.
+The Compose service is named `assignmenttracker`; its volume defaults to the previous `unysync-data` Docker volume so existing installations retain their database during the rename. Set `ASSIGNMENTTRACKER_VOLUME_NAME=assignmenttracker-data` for a fresh installation that should use the new volume name.
 
 ## Calendar feeds
 
@@ -53,16 +54,16 @@ For ranged events, `DTEND` is treated as the real due date by design. The card d
 
 ## Backups and updates
 
-The database is stored in the `unysync-data` Docker volume. Create a backup before upgrading:
+The database is stored in the `assignmenttracker-data` Docker volume. Create a backup before upgrading:
 
 ```sh
 docker compose stop
-docker run --rm --volumes-from unysync -v "$PWD":/backup alpine \
-  tar czf /backup/unysync-data-$(date +%Y%m%d).tgz -C /app/data .
+docker run --rm --volumes-from assignmenttracker -v "$PWD":/backup alpine \
+  tar czf /backup/assignmenttracker-data-$(date +%Y%m%d).tgz -C /app/data .
 docker compose up -d --build
 ```
 
-Restore by stopping the service and extracting an archive into `/app/data` through a temporary container using `--volumes-from unysync`; then start the service again. To update:
+Restore by stopping the service and extracting an archive into `/app/data` through a temporary container using `--volumes-from assignmenttracker`; then start the service again. To update:
 
 ```sh
 git pull
@@ -98,5 +99,4 @@ PYTHONPATH=backend python3 -m pytest backend/tests
 
 ## Privacy and security
 
-UniSync has no advertising, analytics, or tracking. Keep the Raspberry Pi and Tailscale account secured, use HTTPS when possible, and never commit `.env`, database files, or private iCal URLs.
-# AssignmentTracker
+AssignmentTracker has no advertising, analytics, or tracking. Keep the Raspberry Pi and Tailscale account secured, use HTTPS when possible, and never commit `.env`, database files, or private iCal URLs.

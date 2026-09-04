@@ -8,7 +8,7 @@ export type QueuedOperation = {
   device_id: string
 }
 
-const DB_NAME = 'unysync-offline'
+const DB_NAME = 'assignmenttracker-offline'
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
