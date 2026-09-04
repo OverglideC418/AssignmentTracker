@@ -1,3 +1,5 @@
+This whole repo was written by Codex and prompted by me.
+
 # AssignmentTracker
 
 AssignmentTracker is a private, ad-free assignment tracker designed to run on a Raspberry Pi. It imports assignment-like events from multiple iCal feeds, keeps completion state in SQLite, and remains usable on a phone when temporarily offline.
