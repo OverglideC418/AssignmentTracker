@@ -5,11 +5,25 @@ import { cacheSnapshot, clearOperations, queueOperation, readOperations, readSna
 import type { Assignment, Preview, Source } from './types'
 
 type Theme = 'vscode-dark' | 'soft-light' | 'blue-gray' | 'colored-dark'
+function newId() {
+  const browserCrypto = globalThis.crypto
+  if (typeof browserCrypto?.randomUUID === 'function') return browserCrypto.randomUUID()
+  if (typeof browserCrypto?.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16)
+    browserCrypto.getRandomValues(bytes)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+}
+
 const deviceId = (() => {
   const key = 'unysync-device-id'
   const existing = localStorage.getItem(key)
   if (existing) return existing
-  const created = crypto.randomUUID()
+  const created = newId()
   localStorage.setItem(key, created)
   return created
 })()
@@ -84,7 +98,7 @@ export default function App() {
   async function load() { try { const state = await api<{ setup_required: boolean }>('/api/status'); setSetup(state.setup_required); if (state.setup_required) return; await api('/api/preferences'); setAuthenticated(true); const [nextItems, nextSources, prefs] = await Promise.all([api<Assignment[]>('/api/assignments'), api<Source[]>('/api/sources'), api<Record<string, unknown>>('/api/preferences')]); setItems(nextItems); setSources(nextSources); setPreferences(prefs); await cacheSnapshot({ items: nextItems, sources: nextSources, preferences: prefs }) } catch (err) { const snapshot = await readSnapshot<{ items: Assignment[]; sources: Source[]; preferences: Record<string, unknown> }>().catch(() => undefined); if (snapshot) { setSetup(false); setAuthenticated(true); setItems(snapshot.items); setSources(snapshot.sources); setPreferences(snapshot.preferences); setNotice('Offline mode: showing the last saved data.') } else if ((err as Error).message.includes('Sign in')) setAuthenticated(false); else setNotice((err as Error).message) } }
   useEffect(() => { load(); const onlineHandler = () => { setOnline(true); flushQueue() }; const offlineHandler = () => setOnline(false); window.addEventListener('online', onlineHandler); window.addEventListener('offline', offlineHandler); return () => { window.removeEventListener('online', onlineHandler); window.removeEventListener('offline', offlineHandler) } }, [])
   async function flushQueue() { if (!navigator.onLine) return; const operations = await readOperations(); if (!operations.length) return; try { await api('/api/sync', { method: 'POST', body: JSON.stringify({ operations }) }); await clearOperations(operations.map((operation) => operation.operation_id)); setNotice('Offline changes synced.') ; await load() } catch { setNotice('Could not sync queued changes yet.') } }
-  async function complete(item: Assignment) { const completed = !item.completed; setItems((old) => old.map((entry) => entry.id === item.id && entry.kind === item.kind ? { ...entry, completed } : entry)); const changed = new Date().toISOString(); const operation = { operation_id: crypto.randomUUID(), entity: item.kind === 'custom' ? 'custom_task' : 'assignment', entity_id: item.id, action: 'complete', payload: { completed }, client_changed_at: changed, device_id: deviceId } as const; if (!navigator.onLine) return queueOperation(operation); try { await api(item.kind === 'custom' ? `/api/custom-tasks/${item.id}/completion` : `/api/assignments/${item.id}/completion`, { method: 'PATCH', body: JSON.stringify({ completed, client_changed_at: changed, device_id: deviceId }) }); } catch { await queueOperation(operation); setNotice('Saved locally; will sync when you reconnect.') } }
+  async function complete(item: Assignment) { const completed = !item.completed; setItems((old) => old.map((entry) => entry.id === item.id && entry.kind === item.kind ? { ...entry, completed } : entry)); const changed = new Date().toISOString(); const operation = { operation_id: newId(), entity: item.kind === 'custom' ? 'custom_task' : 'assignment', entity_id: item.id, action: 'complete', payload: { completed }, client_changed_at: changed, device_id: deviceId } as const; if (!navigator.onLine) return queueOperation(operation); try { await api(item.kind === 'custom' ? `/api/custom-tasks/${item.id}/completion` : `/api/assignments/${item.id}/completion`, { method: 'PATCH', body: JSON.stringify({ completed, client_changed_at: changed, device_id: deviceId }) }); } catch { await queueOperation(operation); setNotice('Saved locally; will sync when you reconnect.') } }
   const timezone = String(preferences.timezone || 'America/Denver')
   const grouped = useMemo(() => { const { today, end } = weekEnd(Number(preferences.week_start ?? 1), timezone); const todayKey = today.toISOString().slice(0, 10); const endKey = end.toISOString().slice(0, 10); const active = items.filter((item) => !item.completed); return { overdue: active.filter((item) => dateOnly(item.due_at, timezone) < todayKey), week: active.filter((item) => dateOnly(item.due_at, timezone) >= todayKey && dateOnly(item.due_at, timezone) <= endKey), later: active.filter((item) => dateOnly(item.due_at, timezone) > endKey), completed: items.filter((item) => item.completed) } }, [items, preferences.week_start, timezone])
   if (setup === null) return <main className="auth-page"><section className="auth-card"><div className="brand-mark">U</div><p className="eyebrow">PRIVATE ASSIGNMENT TRACKER</p><h1>Loading UniSync</h1><p className="muted">Connecting to your private server…</p></section></main>
