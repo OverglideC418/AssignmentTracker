@@ -12,6 +12,7 @@ AssignmentTracker is a private, ad-free assignment tracker designed to run on a 
 - Per-calendar colors and filtering rules with an import preview.
 - Offline completion changes queued in IndexedDB and synchronized when reconnected.
 - Custom tasks with due dates and notes.
+- JSON backup export and destructive restore from Settings.
 - Single-user password authentication and persistent SQLite storage.
 
 ## Run with Docker
@@ -19,7 +20,7 @@ AssignmentTracker is a private, ad-free assignment tracker designed to run on a 
 The recommended Raspberry Pi installation uses Docker Compose.
 
 ```sh
-git clone <your-repository-url> assignmenttracker
+git clone https://github.com/OverglideC418/AssignmentTracker assignmenttracker
 cd assignmenttracker
 cp .env.example .env
 docker compose up -d --build
@@ -53,6 +54,12 @@ Add a calendar in Settings. Feed URLs are stored only by the server and are not 
 The importer uses stable iCal UIDs. It recognizes common assignment patterns such as `HW #... Upload`, `HW #... Report`, `RQuiz ...`, and `Statics X1/X2/X3`. Lecture topics, `No Class`, `Corrections`, `Student Ratings`, and other uncertain events are excluded or sent to the review preview. Add per-source include/exclude regular expressions for feeds with different conventions.
 
 For ranged events, `DTEND` is treated as the real due date by design. The card displays the full `DTSTART–DTEND` range, and the end date controls weekly grouping/counts.
+
+When two imported events from the same calendar have the same normalized title and different future due dates, the earlier card also lists the later matching dates. This handles feeds that publish an assignment start event separately from its actual deadline. The matching cards remain separate records so completion history is not lost.
+
+## Backups from the app
+
+Settings includes Export backup and Import backup. Exported JSON contains sources, including their private iCal URLs, assignments, completion states, custom tasks, and preferences. Keep the file secure. Import replaces those data sections but does not replace the account password.
 
 ## Backups and updates
 

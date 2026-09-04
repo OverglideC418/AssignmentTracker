@@ -1,5 +1,6 @@
 export type Assignment = {
   id: number
+  source_id?: number | null
   uid?: string | null
   kind: 'imported' | 'custom'
   title: string
@@ -29,4 +30,3 @@ export type Preview = {
   review: Array<Assignment & { category: string }>
   exclude: Array<Assignment & { category: string }>
 }
-

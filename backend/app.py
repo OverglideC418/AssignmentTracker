@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -349,6 +349,25 @@ def assignment_json(row: sqlite3.Row) -> dict[str, Any]:
     return item
 
 
+def export_payload() -> dict[str, Any]:
+    with db() as connection:
+        sources = [dict(row) for row in connection.execute("SELECT * FROM sources ORDER BY id").fetchall()]
+        assignments = [dict(row) for row in connection.execute("SELECT * FROM assignments ORDER BY id").fetchall()]
+        custom_tasks = [dict(row) for row in connection.execute("SELECT * FROM custom_tasks ORDER BY id").fetchall()]
+        preferences = {row["key"]: json.loads(row["value"]) for row in connection.execute("SELECT key, value FROM preferences").fetchall()}
+    for source in sources:
+        source["filter_rules"] = json.loads(source.get("filter_rules") or "{}")
+    return {
+        "format": "assignmenttracker-backup",
+        "version": 1,
+        "exported_at": now_iso(),
+        "sources": sources,
+        "assignments": assignments,
+        "custom_tasks": custom_tasks,
+        "preferences": preferences,
+    }
+
+
 def fetch_ical(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
@@ -474,6 +493,62 @@ def get_preferences(_: int = Depends(current_user)) -> dict[str, Any]:
     values.setdefault("week_start", 1)
     values.setdefault("theme", "vscode-dark")
     return values
+
+
+@app.get("/api/export")
+def export_backup(_: int = Depends(current_user)) -> JSONResponse:
+    return JSONResponse(
+        content=export_payload(),
+        headers={"Content-Disposition": "attachment; filename=assignmenttracker-backup.json"},
+    )
+
+
+@app.post("/api/import")
+def import_backup(payload: dict[str, Any], _: int = Depends(current_user)) -> dict[str, Any]:
+    if payload.get("format") != "assignmenttracker-backup" or payload.get("version") != 1:
+        raise HTTPException(400, "Unsupported AssignmentTracker backup format")
+    sources = payload.get("sources")
+    assignments = payload.get("assignments")
+    custom_tasks = payload.get("custom_tasks")
+    preferences = payload.get("preferences", {})
+    if not isinstance(sources, list) or not isinstance(assignments, list) or not isinstance(custom_tasks, list) or not isinstance(preferences, dict):
+        raise HTTPException(400, "Backup has invalid data sections")
+    source_ids: dict[int, int] = {}
+    timestamp = now_iso()
+    try:
+        with db() as connection:
+            connection.execute("DELETE FROM sync_operations")
+            connection.execute("DELETE FROM assignments")
+            connection.execute("DELETE FROM custom_tasks")
+            connection.execute("DELETE FROM sources")
+            connection.execute("DELETE FROM preferences")
+            for source in sources:
+                old_id = int(source["id"])
+                cursor = connection.execute(
+                    """INSERT INTO sources(name,url,color,enabled,filter_rules,last_sync,last_success,last_error,created_at,updated_at)
+                       VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (str(source["name"]), str(source["url"]), str(source.get("color", "#4fc1e9")), int(bool(source.get("enabled", True))), json.dumps(source.get("filter_rules", {})), source.get("last_sync"), source.get("last_success"), source.get("last_error"), source.get("created_at", timestamp), source.get("updated_at", timestamp)),
+                )
+                source_ids[old_id] = int(cursor.lastrowid)
+            for assignment in assignments:
+                old_source_id = assignment.get("source_id")
+                source_id = source_ids.get(int(old_source_id)) if old_source_id is not None else None
+                connection.execute(
+                    """INSERT INTO assignments(source_id,uid,kind,title,description,start_at,due_at,all_day,active,completed,completed_at,change_at,change_device)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (source_id, assignment.get("uid"), "imported", str(assignment["title"]), str(assignment.get("description", "")), str(assignment["start_at"]), str(assignment["due_at"]), int(bool(assignment.get("all_day", True))), int(bool(assignment.get("active", True))), int(bool(assignment.get("completed", False))), assignment.get("completed_at"), assignment.get("change_at", timestamp), assignment.get("change_device", "restore")),
+                )
+            for task in custom_tasks:
+                connection.execute(
+                    """INSERT INTO custom_tasks(title,description,start_at,due_at,all_day,active,completed,completed_at,change_at,change_device)
+                       VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (str(task["title"]), str(task.get("description", "")), str(task["start_at"]), str(task["due_at"]), int(bool(task.get("all_day", False))), int(bool(task.get("active", True))), int(bool(task.get("completed", False))), task.get("completed_at"), task.get("change_at", timestamp), task.get("change_device", "restore")),
+                )
+            for key, value in preferences.items():
+                connection.execute("INSERT INTO preferences(key,value) VALUES(?,?)", (str(key), json.dumps(value)))
+    except (KeyError, TypeError, ValueError, sqlite3.Error) as exc:
+        raise HTTPException(400, f"Could not restore backup: {exc}") from exc
+    return {"restored": True, "sources": len(sources), "assignments": len(assignments), "custom_tasks": len(custom_tasks)}
 
 
 @app.put("/api/preferences")
